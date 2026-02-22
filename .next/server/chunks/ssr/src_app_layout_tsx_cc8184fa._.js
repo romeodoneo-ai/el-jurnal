@@ -1,0 +1,3 @@
+module.exports=[27572,a=>{"use strict";var b=a.i(7997);function c({children:a}){return(0,b.jsxs)("html",{lang:"ru",children:[(0,b.jsx)("head",{children:(0,b.jsx)("link",{rel:"apple-touch-icon",href:"/icon-192.png"})}),(0,b.jsx)("body",{className:"antialiased min-h-screen",children:a})]})}a.s(["default",()=>c,"metadata",0,{title:"Журнал посещаемости",description:"Электронный журнал посещаемости группы СИС-12",manifest:"/manifest.json",appleWebApp:{capable:!0,statusBarStyle:"default",title:"Журнал"}},"viewport",0,{width:"device-width",initialScale:1,maximumScale:1,userScalable:!1,themeColor:"#3b82f6"}])}];
+
+//# sourceMappingURL=src_app_layout_tsx_cc8184fa._.js.map
