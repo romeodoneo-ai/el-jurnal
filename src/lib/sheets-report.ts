@@ -1,5 +1,5 @@
 import { getFormattedValues, updateValues, clearRange } from './google-sheets';
-import { getSheetNames, MAIN_SHEET, colToLetter, HOURS_PER_PAIR } from './sheets-config';
+import { getSheetNames, MAIN_SHEET, colToLetter, HOURS_PER_PAIR, findLastStudentRow } from './sheets-config';
 import { Student, ReportRow } from './types';
 
 const MONTH_NAMES = [
@@ -28,11 +28,14 @@ export interface ReportData {
 export async function computeReportData(month: number, year: number): Promise<ReportData> {
   const { main: sheetName } = getSheetNames(month, year % 100);
 
-  // Read students
-  const studentVals = await getFormattedValues(
-    `'${sheetName}'!A${MAIN_SHEET.STUDENTS_START_ROW}:B${MAIN_SHEET.STUDENTS_END_ROW}`
+  // Read student IDs to detect actual count
+  const idValsAll = await getFormattedValues(
+    `'${sheetName}'!A${MAIN_SHEET.STUDENTS_START_ROW}:B${MAIN_SHEET.STUDENTS_MAX_ROW}`
   );
-  const students: Student[] = studentVals
+  const endRow = findLastStudentRow(idValsAll);
+
+  const students: Student[] = idValsAll
+    .slice(0, endRow - MAIN_SHEET.STUDENTS_START_ROW + 1)
     .filter((r) => r[0] && r[1])
     .map((r) => ({ id: parseInt(String(r[0])), name: String(r[1]).trim() }));
 
@@ -40,7 +43,7 @@ export async function computeReportData(month: number, year: number): Promise<Re
   const [headerVals, subjectVals, allData] = await Promise.all([
     getFormattedValues(`'${sheetName}'!A1:ZZ1`),
     getFormattedValues(`'${sheetName}'!A3:ZZ3`),
-    getFormattedValues(`'${sheetName}'!A${MAIN_SHEET.STUDENTS_START_ROW}:ZZ${MAIN_SHEET.STUDENTS_END_ROW}`),
+    getFormattedValues(`'${sheetName}'!A${MAIN_SHEET.STUDENTS_START_ROW}:ZZ${endRow}`),
   ]);
 
   const groupName = String(headerVals[0]?.[0] || 'СИС-12').trim();
@@ -154,7 +157,7 @@ export async function writeReportSheet(month: number, year: number, data: Report
   rows.push([]);
 
   // Row 3: header line 1
-  rows.push(['№', 'Предмет,', ...subjects.map(() => ''), '', 'ИТОГО', 'Из них по уважит.', '% пропусков', '% неуважит. проп.']);
+  rows.push(['№', 'Предмет,', ...subjects.map(() => ''), 'ИТОГО', 'Из них по уважит.', '% пропусков', '% неуважит. проп.']);
 
   // Row 4: header line 2
   rows.push(['', 'кол. час']);
@@ -166,7 +169,7 @@ export async function writeReportSheet(month: number, year: number, data: Report
   rows.push(['', 'студента']);
 
   // Row 7: hours per subject
-  rows.push(['', '', ...subjects.map((s) => subjectHours[s] || 0), '', totalHours, '', '', '']);
+  rows.push(['', '', ...subjects.map((s) => subjectHours[s] || 0), totalHours, '', '', '']);
 
   // Rows 8+: student data
   for (let i = 0; i < reportRows.length; i++) {
@@ -175,7 +178,6 @@ export async function writeReportSheet(month: number, year: number, data: Report
       i + 1,
       r.studentName,
       ...subjects.map((s) => r.bySubject[s] || ''),
-      '',
       r.total || '',
       r.excused || '',
       r.totalPercent,
@@ -183,7 +185,7 @@ export async function writeReportSheet(month: number, year: number, data: Report
     ]);
   }
 
-  const endCol = 2 + subjects.length + 1 + 4; // num + name + subjects + gap + 4 summary
+  const endCol = 2 + subjects.length + 4; // num + name + subjects + 4 summary (ИТОГО, уважит, %, %)
   const endRow = 7 + students.length;
   await updateValues(`'${name}'!A1:${colToLetter(endCol)}${endRow}`, rows);
 }

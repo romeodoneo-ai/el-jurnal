@@ -17,9 +17,9 @@ export async function GET() {
     const header = await getFormattedValues(`'${sheetName}'!A1`);
     const groupName = header[0]?.[0] || 'СИС-12';
 
-    // Students from A4:B27
+    // Students — read a wide range, actual count detected dynamically
     const studentValues = await getFormattedValues(
-      `'${sheetName}'!A${MAIN_SHEET.STUDENTS_START_ROW}:B${MAIN_SHEET.STUDENTS_END_ROW}`
+      `'${sheetName}'!A${MAIN_SHEET.STUDENTS_START_ROW}:B${MAIN_SHEET.STUDENTS_MAX_ROW}`
     );
     const students = studentValues
       .filter((r) => r[0] && r[1])

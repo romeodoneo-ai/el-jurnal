@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getFormattedValues, updateValues } from '@/lib/google-sheets';
-import { getSheetNames, MAIN_SHEET, colToLetter, HOURS_PER_PAIR } from '@/lib/sheets-config';
+import { getSheetNames, MAIN_SHEET, colToLetter, HOURS_PER_PAIR, findLastStudentRow } from '@/lib/sheets-config';
 import { AttendanceStatus, PairAttendance } from '@/lib/types';
 
 // Find column index (1-based) for a date in the header row
@@ -33,11 +33,17 @@ export async function GET(request: NextRequest) {
     const sc = colToLetter(startCol);
     const ec = colToLetter(startCol + MAIN_SHEET.PAIRS_PER_DATE - 1);
 
+    // Read student IDs first to detect actual row count
+    const idValsAll = await getFormattedValues(
+      `'${sheetName}'!A${MAIN_SHEET.STUDENTS_START_ROW}:A${MAIN_SHEET.STUDENTS_MAX_ROW}`
+    );
+    const endRow = findLastStudentRow(idValsAll);
+
     // Read subjects (row 3) and student data in parallel
     const [subjectVals, idVals, dataVals] = await Promise.all([
       getFormattedValues(`'${sheetName}'!${sc}3:${ec}3`),
-      getFormattedValues(`'${sheetName}'!A${MAIN_SHEET.STUDENTS_START_ROW}:A${MAIN_SHEET.STUDENTS_END_ROW}`),
-      getFormattedValues(`'${sheetName}'!${sc}${MAIN_SHEET.STUDENTS_START_ROW}:${ec}${MAIN_SHEET.STUDENTS_END_ROW}`),
+      getFormattedValues(`'${sheetName}'!A${MAIN_SHEET.STUDENTS_START_ROW}:A${endRow}`),
+      getFormattedValues(`'${sheetName}'!${sc}${MAIN_SHEET.STUDENTS_START_ROW}:${ec}${endRow}`),
     ]);
 
     const subjects = subjectVals[0] || [];
@@ -87,10 +93,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Дата не найдена в листе ${sheetName}` }, { status: 404 });
     }
 
-    // Read student IDs for row mapping
-    const idVals = await getFormattedValues(
-      `'${sheetName}'!A${MAIN_SHEET.STUDENTS_START_ROW}:A${MAIN_SHEET.STUDENTS_END_ROW}`
+    // Read student IDs for row mapping (detect actual count)
+    const idValsAll = await getFormattedValues(
+      `'${sheetName}'!A${MAIN_SHEET.STUDENTS_START_ROW}:A${MAIN_SHEET.STUDENTS_MAX_ROW}`
     );
+    const endRow = findLastStudentRow(idValsAll);
+    const idVals = idValsAll.slice(0, endRow - MAIN_SHEET.STUDENTS_START_ROW + 1);
     const studentIds = idVals.map((r) => parseInt(String(r[0])));
 
     // Build subject row
@@ -119,13 +127,13 @@ export async function POST(request: NextRequest) {
     await Promise.all([
       updateValues(`'${sheetName}'!${sc}3:${ec}3`, [subjectRow]),
       updateValues(
-        `'${sheetName}'!${sc}${MAIN_SHEET.STUDENTS_START_ROW}:${ec}${MAIN_SHEET.STUDENTS_END_ROW}`,
+        `'${sheetName}'!${sc}${MAIN_SHEET.STUDENTS_START_ROW}:${ec}${endRow}`,
         grid
       ),
     ]);
 
     // Update summary columns C-F
-    await updateSummary(sheetName, studentIds);
+    await updateSummary(sheetName, studentIds, endRow);
 
     return NextResponse.json({ success: true, message: `Сохранено: ${d}.${String(m).padStart(2, '0')}` });
   } catch (error: unknown) {
@@ -136,9 +144,9 @@ export async function POST(request: NextRequest) {
 }
 
 // Recalculate summary columns C-F for each student
-async function updateSummary(sheetName: string, studentIds: number[]) {
+async function updateSummary(sheetName: string, studentIds: number[], endRow: number) {
   const allData = await getFormattedValues(
-    `'${sheetName}'!A${MAIN_SHEET.STUDENTS_START_ROW}:ZZ${MAIN_SHEET.STUDENTS_END_ROW}`
+    `'${sheetName}'!A${MAIN_SHEET.STUDENTS_START_ROW}:ZZ${endRow}`
   );
 
   const summary: (string | number)[][] = [];
@@ -166,7 +174,7 @@ async function updateSummary(sheetName: string, studentIds: number[]) {
   }
 
   await updateValues(
-    `'${sheetName}'!C${MAIN_SHEET.STUDENTS_START_ROW}:F${MAIN_SHEET.STUDENTS_END_ROW}`,
+    `'${sheetName}'!C${MAIN_SHEET.STUDENTS_START_ROW}:F${endRow}`,
     summary
   );
 }

@@ -16,3 +16,6 @@ Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allow
 [00:01:56.893] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
 [00:01:56.909] Server  ERROR   Config API error: "Google Sheets не настроен: добавьте GOOGLE_SERVICE_ACCOUNT_EMAIL и GOOGLE_PRIVATE_KEY в переменные окружения"
 [00:01:58.822] Server  ERROR   Attendance GET error: "Google Sheets не настроен: добавьте GOOGLE_SERVICE_ACCOUNT_EMAIL и GOOGLE_PRIVATE_KEY в переменные окружения"
+[00:28:07.920] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:28:08.165] Server  ERROR   Config API error: "Google Sheets не настроен: добавьте GOOGLE_SERVICE_ACCOUNT_EMAIL и GOOGLE_PRIVATE_KEY в переменные окружения"
+[00:28:08.202] Server  ERROR   Attendance GET error: "Google Sheets не настроен: добавьте GOOGLE_SERVICE_ACCOUNT_EMAIL и GOOGLE_PRIVATE_KEY в переменные окружения"
