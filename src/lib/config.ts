@@ -1,9 +1,12 @@
 import { Student } from './types';
 
-export const GROUP_NAME = 'СИС-12';
-export const CURATOR = 'Сергей Павлович Мантуленко';
+// Fallback values used when the API is unreachable (offline mode).
+// The real source of truth is Google Sheets.
 
-export const STUDENTS: Student[] = [
+export const FALLBACK_GROUP_NAME = 'СИС-12';
+export const FALLBACK_CURATOR = 'Сергей Павлович Мантуленко';
+
+export const FALLBACK_STUDENTS: Student[] = [
   { id: 1, name: 'Бреславский Леонид' },
   { id: 2, name: 'Бугай Дмитрий' },
   { id: 3, name: 'Быкадоров Николай' },
@@ -30,18 +33,7 @@ export const STUDENTS: Student[] = [
   { id: 24, name: 'Шкабарня Александра' },
 ];
 
-export const SUBJECTS = [
-  'Математика',
-  'Физика',
-  'Литература',
-  'Русский',
-  'История',
-  'Химия',
-  'Информатика',
-  'Иностранный',
-] as const;
-
-export type Subject = (typeof SUBJECTS)[number];
-
-// Hours per pair (each pair = 2 academic hours)
-export const HOURS_PER_PAIR = 2;
+export const FALLBACK_SUBJECTS = [
+  'Математика', 'Физика', 'Литература', 'Русский',
+  'История', 'Химия', 'Информатика', 'Иностранный',
+];

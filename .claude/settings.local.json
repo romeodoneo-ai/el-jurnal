@@ -8,7 +8,8 @@
       "Bash(npm install)",
       "mcp__Claude_Preview__preview_start",
       "Bash(timeout 15 node:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(npm install googleapis)"
     ]
   }
 }

@@ -36,3 +36,10 @@ export interface MonthReport {
   totalHours: number;
   rows: ReportRow[];
 }
+
+export interface SheetsConfig {
+  groupName: string;
+  students: Student[];
+  subjects: string[];
+  curator: string;
+}
