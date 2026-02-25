@@ -33,9 +33,9 @@ export async function GET(request: NextRequest) {
     const sc = colToLetter(startCol);
     const ec = colToLetter(startCol + MAIN_SHEET.PAIRS_PER_DATE - 1);
 
-    // Read student IDs first to detect actual row count
+    // Read student IDs + names to detect actual row count
     const idValsAll = await getFormattedValues(
-      `'${sheetName}'!A${MAIN_SHEET.STUDENTS_START_ROW}:A${MAIN_SHEET.STUDENTS_MAX_ROW}`
+      `'${sheetName}'!A${MAIN_SHEET.STUDENTS_START_ROW}:B${MAIN_SHEET.STUDENTS_MAX_ROW}`
     );
     const endRow = findLastStudentRow(idValsAll);
 
@@ -93,9 +93,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Дата не найдена в листе ${sheetName}` }, { status: 404 });
     }
 
-    // Read student IDs for row mapping (detect actual count)
+    // Read student IDs + names for row mapping (detect actual count)
     const idValsAll = await getFormattedValues(
-      `'${sheetName}'!A${MAIN_SHEET.STUDENTS_START_ROW}:A${MAIN_SHEET.STUDENTS_MAX_ROW}`
+      `'${sheetName}'!A${MAIN_SHEET.STUDENTS_START_ROW}:B${MAIN_SHEET.STUDENTS_MAX_ROW}`
     );
     const endRow = findLastStudentRow(idValsAll);
     const idVals = idValsAll.slice(0, endRow - MAIN_SHEET.STUDENTS_START_ROW + 1);

@@ -17,12 +17,24 @@ export const MAIN_SHEET = {
   PAIRS_PER_DATE: 4,
 };
 
-/** Find the last row that contains a student (1-based row number). */
-export function findLastStudentRow(idColumn: string[][]): number {
+/**
+ * Find the last row that contains a student (1-based row number).
+ * Expects data with columns A and B (number + name).
+ * Stops at the first gap (row without both number AND name),
+ * so the subject list below students is never included.
+ */
+export function findLastStudentRow(data: string[][]): number {
   let lastIdx = 0;
-  for (let i = 0; i < idColumn.length; i++) {
-    const val = String(idColumn[i]?.[0] || '').trim();
-    if (val && !isNaN(Number(val)) && Number(val) > 0) lastIdx = i;
+  let foundStudent = false;
+  for (let i = 0; i < data.length; i++) {
+    const num = String(data[i]?.[0] || '').trim();
+    const name = String(data[i]?.[1] || '').trim();
+    if (num && !isNaN(Number(num)) && Number(num) > 0 && name) {
+      lastIdx = i;
+      foundStudent = true;
+    } else if (foundStudent) {
+      break; // first gap after students — stop
+    }
   }
   return MAIN_SHEET.STUDENTS_START_ROW + lastIdx;
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getFormattedValues, listSheetNames } from '@/lib/google-sheets';
-import { MAIN_SHEET } from '@/lib/sheets-config';
+import { MAIN_SHEET, findLastStudentRow } from '@/lib/sheets-config';
 
 export async function GET() {
   try {
@@ -17,27 +17,25 @@ export async function GET() {
     const header = await getFormattedValues(`'${sheetName}'!A1`);
     const groupName = header[0]?.[0] || 'СИС-12';
 
-    // Students — read a wide range, actual count detected dynamically
+    // Students — read a wide range, stop at first gap (before subject list)
     const studentValues = await getFormattedValues(
       `'${sheetName}'!A${MAIN_SHEET.STUDENTS_START_ROW}:B${MAIN_SHEET.STUDENTS_MAX_ROW}`
     );
+    const endRow = findLastStudentRow(studentValues);
     const students = studentValues
+      .slice(0, endRow - MAIN_SHEET.STUDENTS_START_ROW + 1)
       .filter((r) => r[0] && r[1])
       .map((r) => ({ id: parseInt(String(r[0])), name: String(r[1]).trim() }));
 
-    // Subjects from the bottom section (numbered list below students)
-    const subjectValues = await getFormattedValues(`'${sheetName}'!A30:B45`);
-    const subjects: string[] = [];
-    for (const row of subjectValues) {
-      if (row[0] && row[1] && /^\d+$/.test(String(row[0]).trim())) {
-        subjects.push(String(row[1]).trim());
-      }
+    // Subjects — read from row 3 (schedule row) and extract unique names
+    const subjectRow = await getFormattedValues(`'${sheetName}'!G3:ZZ3`);
+    const subjectSet = new Set<string>();
+    const skipNames = ['Опозданий', 'По уважительной', 'Пропусков'];
+    for (const cell of (subjectRow[0] || [])) {
+      const s = String(cell || '').trim();
+      if (s && !skipNames.includes(s)) subjectSet.add(s);
     }
-
-    const fallbackSubjects = [
-      'Математика', 'Физика', 'Литература', 'Русский',
-      'История', 'Химия', 'Информатика', 'Иностранный',
-    ];
+    const subjects = Array.from(subjectSet);
 
     // Curator from report sheet header
     const reportSheets = sheetNames.filter((n) => n.endsWith('Отчет'));
@@ -51,7 +49,7 @@ export async function GET() {
     return NextResponse.json({
       groupName,
       students,
-      subjects: subjects.length > 0 ? subjects : fallbackSubjects,
+      subjects,
       curator: curator || 'Куратор',
       availableMonths: mainSheets,
     });
