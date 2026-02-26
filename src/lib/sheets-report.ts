@@ -1,4 +1,5 @@
-import { getFormattedValues, updateValues, clearRange } from './google-sheets';
+import { getFormattedValues, updateValues, clearRange, getSheetId, batchUpdate } from './google-sheets';
+import { sheets_v4 } from 'googleapis';
 import { getSheetNames, MAIN_SHEET, colToLetter, HOURS_PER_PAIR, findLastStudentRow } from './sheets-config';
 import { Student, ReportRow } from './types';
 
@@ -188,6 +189,19 @@ export async function writeReportSheet(month: number, year: number, data: Report
   const endCol = 2 + subjects.length + 4; // num + name + subjects + 4 summary (ИТОГО, уважит, %, %)
   const endRow = 7 + students.length;
   await updateValues(`'${name}'!A1:${colToLetter(endCol)}${endRow}`, rows);
+
+  // Apply borders to report table
+  try {
+    const sheetId = await getSheetId(name);
+    await applyBorders(sheetId, {
+      headerStartRow: 2,  // row 3 (0-indexed)
+      headerEndRow: 7,    // after row 7
+      dataStartRow: 7,
+      dataEndRow: endRow,
+      startCol: 0,
+      endCol,
+    });
+  } catch { /* formatting is non-critical */ }
 }
 
 // Write the "Подробно" sheet
@@ -228,4 +242,77 @@ export async function writeDetailedSheet(month: number, year: number, data: Repo
   const endCol = 2 + subjects.length * 3;
   const endRow = 2 + detailedRows.length + 1;
   await updateValues(`'${name}'!A1:${colToLetter(endCol)}${endRow}`, rows);
+
+  // Apply borders to detailed table
+  try {
+    const sheetId = await getSheetId(name);
+    await applyBorders(sheetId, {
+      headerStartRow: 0,
+      headerEndRow: 2,
+      dataStartRow: 2,
+      dataEndRow: endRow,
+      startCol: 0,
+      endCol,
+    });
+  } catch { /* formatting is non-critical */ }
+}
+
+// --- Border formatting helpers ---
+
+const THICK_BORDER: sheets_v4.Schema$Border = {
+  style: 'SOLID_MEDIUM',
+  color: { red: 0, green: 0, blue: 0, alpha: 1 },
+};
+
+const THIN_BORDER: sheets_v4.Schema$Border = {
+  style: 'SOLID',
+  color: { red: 0, green: 0, blue: 0, alpha: 1 },
+};
+
+interface BorderArea {
+  headerStartRow: number; // 0-indexed
+  headerEndRow: number;
+  dataStartRow: number;
+  dataEndRow: number;
+  startCol: number;
+  endCol: number;
+}
+
+async function applyBorders(sheetId: number, area: BorderArea) {
+  const requests: sheets_v4.Schema$Request[] = [];
+
+  // Outer border (thick) + inner borders (thin) for entire table
+  requests.push({
+    updateBorders: {
+      range: {
+        sheetId,
+        startRowIndex: area.headerStartRow,
+        endRowIndex: area.dataEndRow,
+        startColumnIndex: area.startCol,
+        endColumnIndex: area.endCol,
+      },
+      top: THICK_BORDER,
+      bottom: THICK_BORDER,
+      left: THICK_BORDER,
+      right: THICK_BORDER,
+      innerHorizontal: THIN_BORDER,
+      innerVertical: THIN_BORDER,
+    },
+  });
+
+  // Thick border between header and data rows
+  requests.push({
+    updateBorders: {
+      range: {
+        sheetId,
+        startRowIndex: area.headerEndRow,
+        endRowIndex: area.headerEndRow,
+        startColumnIndex: area.startCol,
+        endColumnIndex: area.endCol,
+      },
+      top: THICK_BORDER,
+    },
+  });
+
+  await batchUpdate(requests);
 }

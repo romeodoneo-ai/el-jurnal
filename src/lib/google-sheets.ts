@@ -57,3 +57,24 @@ export async function listSheetNames(): Promise<string[]> {
   });
   return (res.data.sheets || []).map((s) => s.properties?.title || '');
 }
+
+/** Get the numeric sheetId for a given sheet name (needed for formatting API). */
+export async function getSheetId(sheetName: string): Promise<number> {
+  const res = await getSheets().spreadsheets.get({
+    spreadsheetId: sid(),
+    fields: 'sheets.properties',
+  });
+  const sheet = (res.data.sheets || []).find((s) => s.properties?.title === sheetName);
+  if (!sheet?.properties?.sheetId && sheet?.properties?.sheetId !== 0) {
+    throw new Error(`Sheet "${sheetName}" not found`);
+  }
+  return sheet.properties.sheetId;
+}
+
+/** Send a batchUpdate request (for formatting, borders, merges, etc). */
+export async function batchUpdate(requests: sheets_v4.Schema$Request[]): Promise<void> {
+  await getSheets().spreadsheets.batchUpdate({
+    spreadsheetId: sid(),
+    requestBody: { requests },
+  });
+}
