@@ -86,6 +86,18 @@ export function findSubjectList(data: string[][]): { startRow: number; subjects:
 
 export const HOURS_PER_PAIR = 2;
 
+/**
+ * Sort sheet names like "MM.YY" chronologically (by year then month).
+ * Alphabetical sort fails: "06.25" > "02.26" but Feb 2026 is newer.
+ */
+export function sortSheetsByDate(sheets: string[]): string[] {
+  return [...sheets].sort((a, b) => {
+    const [ma, ya] = a.split('.').map(Number);
+    const [mb, yb] = b.split('.').map(Number);
+    return (ya * 100 + ma) - (yb * 100 + mb);
+  });
+}
+
 export function colToLetter(col: number): string {
   let result = '';
   let c = col;

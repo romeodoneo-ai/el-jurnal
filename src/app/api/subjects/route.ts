@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getFormattedValues, updateValues, clearRange } from '@/lib/google-sheets';
-import { MAIN_SHEET, findSubjectList } from '@/lib/sheets-config';
+import { MAIN_SHEET, findSubjectList, sortSheetsByDate } from '@/lib/sheets-config';
 import { listSheetNames } from '@/lib/google-sheets';
 
 async function getLatestSheet(): Promise<string> {
   const sheetNames = await listSheetNames();
-  const mainSheets = sheetNames.filter((n) => /^\d{2}\.\d{2}$/.test(n)).sort();
+  const mainSheets = sortSheetsByDate(sheetNames.filter((n) => /^\d{2}\.\d{2}$/.test(n)));
   if (mainSheets.length === 0) throw new Error('Листы не найдены');
   return mainSheets[mainSheets.length - 1];
 }

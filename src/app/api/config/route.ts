@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import { getFormattedValues, listSheetNames } from '@/lib/google-sheets';
-import { MAIN_SHEET, findLastStudentRow, findSubjectList } from '@/lib/sheets-config';
+import { MAIN_SHEET, findLastStudentRow, findSubjectList, sortSheetsByDate } from '@/lib/sheets-config';
 
 export async function GET() {
   try {
     const sheetNames = await listSheetNames();
-    const mainSheets = sheetNames.filter((n) => /^\d{2}\.\d{2}$/.test(n)).sort();
+    const mainSheets = sortSheetsByDate(sheetNames.filter((n) => /^\d{2}\.\d{2}$/.test(n)));
 
     if (mainSheets.length === 0) {
       return NextResponse.json({ error: 'Листы не найдены' }, { status: 404 });
