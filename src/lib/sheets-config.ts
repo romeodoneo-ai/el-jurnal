@@ -39,6 +39,51 @@ export function findLastStudentRow(data: string[][]): number {
   return MAIN_SHEET.STUDENTS_START_ROW + lastIdx;
 }
 
+/**
+ * Find the subject list below students.
+ * After the student block ends, skips empty/partial rows,
+ * then finds the next block of "number + text" rows (the subject list).
+ * Returns { startRow (1-based), subjects: string[] }.
+ */
+export function findSubjectList(data: string[][]): { startRow: number; subjects: string[] } {
+  // First, skip past students (first block of number+name rows)
+  let i = 0;
+  let foundStudent = false;
+  for (; i < data.length; i++) {
+    const num = String(data[i]?.[0] || '').trim();
+    const name = String(data[i]?.[1] || '').trim();
+    if (num && !isNaN(Number(num)) && Number(num) > 0 && name) {
+      foundStudent = true;
+    } else if (foundStudent) {
+      break; // end of students
+    }
+  }
+
+  // Now skip the gap (empty or partial rows)
+  for (; i < data.length; i++) {
+    const num = String(data[i]?.[0] || '').trim();
+    const name = String(data[i]?.[1] || '').trim();
+    if (num && !isNaN(Number(num)) && Number(num) > 0 && name) {
+      break; // found start of subject list
+    }
+  }
+
+  const startRow = MAIN_SHEET.STUDENTS_START_ROW + i;
+  const subjects: string[] = [];
+
+  for (; i < data.length; i++) {
+    const num = String(data[i]?.[0] || '').trim();
+    const name = String(data[i]?.[1] || '').trim();
+    if (num && !isNaN(Number(num)) && Number(num) > 0 && name) {
+      subjects.push(name);
+    } else {
+      break; // end of subject list
+    }
+  }
+
+  return { startRow, subjects };
+}
+
 export const HOURS_PER_PAIR = 2;
 
 export function colToLetter(col: number): string {

@@ -7,6 +7,12 @@ export default function SettingsPage() {
   const [status, setStatus] = useState<'checking' | 'connected' | 'error'>('checking');
   const [statusMsg, setStatusMsg] = useState('');
   const [dataSize, setDataSize] = useState('');
+  const [subjects, setSubjects] = useState<string[]>([]);
+  const [newSubject, setNewSubject] = useState('');
+  const [editIdx, setEditIdx] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [subjectsSaving, setSubjectsSaving] = useState(false);
+  const [subjectsMsg, setSubjectsMsg] = useState('');
 
   useEffect(() => {
     // Check connection to Google Sheets
@@ -28,6 +34,18 @@ export default function SettingsPage() {
       }
     }
     checkConnection();
+
+    // Load subjects
+    async function loadSubjects() {
+      try {
+        const res = await fetch('/api/subjects');
+        if (res.ok) {
+          const data = await res.json();
+          setSubjects(data.subjects || []);
+        }
+      } catch { /* offline */ }
+    }
+    loadSubjects();
 
     try {
       const data = localStorage.getItem('el-jurnal-attendance');
@@ -66,6 +84,56 @@ export default function SettingsPage() {
     }
   };
 
+  const saveSubjects = async (updated: string[]) => {
+    setSubjectsSaving(true);
+    setSubjectsMsg('');
+    try {
+      const res = await fetch('/api/subjects', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subjects: updated }),
+      });
+      if (res.ok) {
+        setSubjects(updated);
+        setSubjectsMsg('Сохранено');
+        setTimeout(() => setSubjectsMsg(''), 2000);
+      } else {
+        const err = await res.json();
+        setSubjectsMsg(`Ошибка: ${err.error}`);
+      }
+    } catch {
+      setSubjectsMsg('Нет подключения');
+    }
+    setSubjectsSaving(false);
+  };
+
+  const handleAddSubject = () => {
+    const name = newSubject.trim();
+    if (!name || subjects.includes(name)) return;
+    saveSubjects([...subjects, name]);
+    setNewSubject('');
+  };
+
+  const handleDeleteSubject = (idx: number) => {
+    saveSubjects(subjects.filter((_, i) => i !== idx));
+  };
+
+  const handleStartEdit = (idx: number) => {
+    setEditIdx(idx);
+    setEditValue(subjects[idx]);
+  };
+
+  const handleSaveEdit = () => {
+    if (editIdx === null) return;
+    const name = editValue.trim();
+    if (!name) return;
+    const updated = [...subjects];
+    updated[editIdx] = name;
+    saveSubjects(updated);
+    setEditIdx(null);
+    setEditValue('');
+  };
+
   return (
     <div className="max-w-lg mx-auto pb-8">
       <header className="bg-blue-500 text-white px-4 py-3 sticky top-0 z-50 shadow-md">
@@ -101,6 +169,74 @@ export default function SettingsPage() {
             Убедитесь, что Environment Variables настроены в Vercel (GOOGLE_SPREADSHEET_ID, GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY).
           </p>
         )}
+      </div>
+
+      {/* Subject management */}
+      <div className="px-4 py-4 bg-white border-b border-gray-100">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-bold text-gray-700">Предметы</h2>
+          {subjectsMsg && (
+            <span className={`text-xs ${subjectsMsg.startsWith('Ошибка') ? 'text-red-500' : 'text-emerald-600'}`}>
+              {subjectsMsg}
+            </span>
+          )}
+        </div>
+
+        {subjects.length === 0 ? (
+          <p className="text-xs text-gray-400 mb-3">Загрузка...</p>
+        ) : (
+          <div className="space-y-1.5 mb-3">
+            {subjects.map((s, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className="text-xs text-gray-400 w-5 text-right">{i + 1}.</span>
+                {editIdx === i ? (
+                  <>
+                    <input
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
+                      className="flex-1 text-sm px-2 py-1.5 border border-blue-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      autoFocus
+                    />
+                    <button onClick={handleSaveEdit} className="text-xs text-emerald-600 font-medium px-2">OK</button>
+                    <button onClick={() => setEditIdx(null)} className="text-xs text-gray-400 px-1">X</button>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1 text-sm text-gray-700">{s}</span>
+                    <button onClick={() => handleStartEdit(i)} className="text-xs text-blue-500 px-2">
+                      Изм.
+                    </button>
+                    <button
+                      onClick={() => handleDeleteSubject(i)}
+                      className="text-xs text-red-400 px-1"
+                      disabled={subjectsSaving}
+                    >
+                      X
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <input
+            value={newSubject}
+            onChange={(e) => setNewSubject(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddSubject()}
+            placeholder="Новый предмет..."
+            className="flex-1 text-sm px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-400"
+          />
+          <button
+            onClick={handleAddSubject}
+            disabled={!newSubject.trim() || subjectsSaving}
+            className="px-4 py-2 text-sm font-medium bg-blue-500 text-white rounded-xl disabled:opacity-40"
+          >
+            +
+          </button>
+        </div>
       </div>
 
       {/* Data management */}

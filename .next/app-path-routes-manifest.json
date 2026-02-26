@@ -4,6 +4,7 @@
   "/api/attendance/route": "/api/attendance",
   "/api/config/route": "/api/config",
   "/api/report/route": "/api/report",
+  "/api/subjects/route": "/api/subjects",
   "/favicon.ico/route": "/favicon.ico",
   "/page": "/",
   "/report/page": "/report",

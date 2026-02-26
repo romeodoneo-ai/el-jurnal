@@ -59,6 +59,12 @@
       "namedRegex": "^/api/report(?:/)?$"
     },
     {
+      "page": "/api/subjects",
+      "regex": "^/api/subjects(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/subjects(?:/)?$"
+    },
+    {
       "page": "/favicon.ico",
       "regex": "^/favicon\\.ico(?:/)?$",
       "routeKeys": {},

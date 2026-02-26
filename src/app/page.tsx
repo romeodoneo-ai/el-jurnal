@@ -236,7 +236,7 @@ export default function Home() {
         <div className="py-8 text-center text-gray-400">Загрузка данных...</div>
       ) : (
         <>
-          {/* Pair tabs — auto-detected from sheet */}
+          {/* Pair tabs + pair count selector */}
           <div className="px-4 py-2 bg-white border-b border-gray-100">
             <div className="flex gap-2">
               {Array.from({ length: pairCount }, (_, i) => {
@@ -260,6 +260,28 @@ export default function Home() {
                   </button>
                 );
               })}
+              {/* +/- pair count buttons */}
+              {pairCount < 4 && (
+                <button
+                  onClick={() => {
+                    const newCount = pairCount + 1;
+                    setPairCount(newCount);
+                    if (pairs.length < newCount) {
+                      setPairs((p) => [...p, { pairNumber: newCount, subject: '', attendance: {} }]);
+                    }
+                  }}
+                  className="w-10 py-2 rounded-xl text-xs font-bold bg-gray-100 text-gray-400 hover:bg-gray-200"
+                >+</button>
+              )}
+              {pairCount > 1 && (
+                <button
+                  onClick={() => {
+                    if (activePair >= pairCount - 1) setActivePair(pairCount - 2);
+                    setPairCount(pairCount - 1);
+                  }}
+                  className="w-10 py-2 rounded-xl text-xs font-bold bg-gray-100 text-gray-400 hover:bg-gray-200"
+                >−</button>
+              )}
             </div>
           </div>
 

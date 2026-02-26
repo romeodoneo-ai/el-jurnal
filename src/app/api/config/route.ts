@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getFormattedValues, listSheetNames } from '@/lib/google-sheets';
-import { MAIN_SHEET, findLastStudentRow } from '@/lib/sheets-config';
+import { MAIN_SHEET, findLastStudentRow, findSubjectList } from '@/lib/sheets-config';
 
 export async function GET() {
   try {
@@ -27,9 +27,12 @@ export async function GET() {
       .filter((r) => r[0] && r[1])
       .map((r) => ({ id: parseInt(String(r[0])), name: String(r[1]).trim() }));
 
-    // Subjects — read from row 3 (schedule row) and extract unique names
+    // Subjects — master list from below students
+    const { subjects: masterSubjects } = findSubjectList(studentValues);
+
+    // Also get subjects from row 3 (already used in schedule) in case some aren't in master list
     const subjectRow = await getFormattedValues(`'${sheetName}'!G3:ZZ3`);
-    const subjectSet = new Set<string>();
+    const subjectSet = new Set<string>(masterSubjects);
     const skipNames = ['Опозданий', 'По уважительной', 'Пропусков'];
     for (const cell of (subjectRow[0] || [])) {
       const s = String(cell || '').trim();
