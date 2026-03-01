@@ -85,3 +85,22 @@ export async function ensureSheet(name: string): Promise<void> {
   if (names.includes(name)) return;
   await batchUpdate([{ addSheet: { properties: { title: name } } }]);
 }
+
+/** Insert rows into a sheet. startIndex is 0-based. Shifts all data below down. */
+export async function insertRows(sheetId: number, startIndex: number, count: number): Promise<void> {
+  await batchUpdate([{
+    insertDimension: {
+      range: { sheetId, dimension: 'ROWS', startIndex, endIndex: startIndex + count },
+      inheritFromBefore: true,
+    },
+  }]);
+}
+
+/** Delete rows from a sheet. startIndex is 0-based. Shifts all data below up. */
+export async function deleteRows(sheetId: number, startIndex: number, count: number): Promise<void> {
+  await batchUpdate([{
+    deleteDimension: {
+      range: { sheetId, dimension: 'ROWS', startIndex, endIndex: startIndex + count },
+    },
+  }]);
+}

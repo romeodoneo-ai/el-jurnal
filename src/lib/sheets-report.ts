@@ -258,7 +258,7 @@ export async function writeReportSheet(month: number, year: number, data: Report
       },
     });
 
-    // Title formatting: wrap, center, middle
+    // Title formatting: wrap, center, middle, BOLD
     requests.push({
       repeatCell: {
         range: { sheetId, startRowIndex: 0, endRowIndex: 2, startColumnIndex: 0, endColumnIndex: endCol },
@@ -267,7 +267,7 @@ export async function writeReportSheet(month: number, year: number, data: Report
             horizontalAlignment: 'CENTER',
             verticalAlignment: 'MIDDLE',
             wrapStrategy: 'WRAP',
-            textFormat: { bold: false },
+            textFormat: { bold: true },
           },
         },
         fields: 'userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment,userEnteredFormat.wrapStrategy,userEnteredFormat.textFormat.bold',
@@ -311,6 +311,21 @@ export async function writeReportSheet(month: number, year: number, data: Report
         },
       });
     }
+
+    // ИТОГО + 3 summary column HEADERS (rows 3-6): 90° rotated + bold
+    const sumStartCol = 2 + subjects.length; // ИТОГО column index
+    requests.push({
+      repeatCell: {
+        range: { sheetId, startRowIndex: 2, endRowIndex: 6, startColumnIndex: sumStartCol, endColumnIndex: endCol },
+        cell: {
+          userEnteredFormat: {
+            textFormat: { bold: true },
+            textRotation: { angle: 90 },
+          },
+        },
+        fields: 'userEnteredFormat.textFormat.bold,userEnteredFormat.textRotation',
+      },
+    });
 
     // Data area: NOT bold
     requests.push({

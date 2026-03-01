@@ -22,6 +22,7 @@ export default function SettingsPage() {
 
   // Students
   const [students, setStudents] = useState<StudentItem[]>([]);
+  const [newStudent, setNewStudent] = useState('');
   const [editStudentIdx, setEditStudentIdx] = useState<number | null>(null);
   const [editStudentValue, setEditStudentValue] = useState('');
   const [studentsSaving, setStudentsSaving] = useState(false);
@@ -161,6 +162,56 @@ export default function SettingsPage() {
     setStudentsSaving(false);
     setEditStudentIdx(null);
     setEditStudentValue('');
+  };
+
+  const handleAddStudent = async () => {
+    const name = newStudent.trim();
+    if (!name) return;
+    setStudentsSaving(true);
+    setStudentsMsg('');
+    try {
+      const res = await fetch('/api/students', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setStudents(data.students || []);
+        setNewStudent('');
+        setStudentsMsg('Добавлен');
+        setTimeout(() => setStudentsMsg(''), 2000);
+      } else {
+        setStudentsMsg(`Ошибка: ${data.error}`);
+      }
+    } catch {
+      setStudentsMsg('Нет подключения');
+    }
+    setStudentsSaving(false);
+  };
+
+  const handleDeleteStudent = async (id: number, name: string) => {
+    if (!confirm(`Удалить студента "${name}"? Данные посещаемости сдвинутся.`)) return;
+    setStudentsSaving(true);
+    setStudentsMsg('');
+    try {
+      const res = await fetch('/api/students', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setStudents(data.students || []);
+        setStudentsMsg('Удалён');
+        setTimeout(() => setStudentsMsg(''), 2000);
+      } else {
+        setStudentsMsg(`Ошибка: ${data.error}`);
+      }
+    } catch {
+      setStudentsMsg('Нет подключения');
+    }
+    setStudentsSaving(false);
   };
 
   // --- Subject management ---
@@ -357,15 +408,35 @@ export default function SettingsPage() {
                     <button onClick={() => handleStartStudentEdit(i)} className="text-xs text-blue-500 px-2">
                       Изм.
                     </button>
+                    <button
+                      onClick={() => handleDeleteStudent(st.id, st.name)}
+                      className="text-xs text-red-400 px-1"
+                      disabled={studentsSaving}
+                    >
+                      X
+                    </button>
                   </>
                 )}
               </div>
             ))}
           </div>
         )}
-        <p className="text-xs text-gray-400 mt-2">
-          Для добавления/удаления студентов редактируйте Google Таблицу напрямую.
-        </p>
+        <div className="flex gap-2 mt-3">
+          <input
+            value={newStudent}
+            onChange={(e) => setNewStudent(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddStudent()}
+            placeholder="Новый студент..."
+            className="flex-1 text-sm px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-400"
+          />
+          <button
+            onClick={handleAddStudent}
+            disabled={!newStudent.trim() || studentsSaving}
+            className="px-4 py-2 text-sm font-medium bg-blue-500 text-white rounded-xl disabled:opacity-40"
+          >
+            +
+          </button>
+        </div>
       </div>
 
       {/* Subject management */}
