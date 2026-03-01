@@ -3,10 +3,31 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
+interface StudentItem {
+  id: number;
+  name: string;
+}
+
 export default function SettingsPage() {
   const [status, setStatus] = useState<'checking' | 'connected' | 'error'>('checking');
   const [statusMsg, setStatusMsg] = useState('');
   const [dataSize, setDataSize] = useState('');
+
+  // Settings
+  const [groupName, setGroupName] = useState('');
+  const [curator, setCurator] = useState('');
+  const [academicYear, setAcademicYear] = useState('');
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsMsg, setSettingsMsg] = useState('');
+
+  // Students
+  const [students, setStudents] = useState<StudentItem[]>([]);
+  const [editStudentIdx, setEditStudentIdx] = useState<number | null>(null);
+  const [editStudentValue, setEditStudentValue] = useState('');
+  const [studentsSaving, setStudentsSaving] = useState(false);
+  const [studentsMsg, setStudentsMsg] = useState('');
+
+  // Subjects
   const [subjects, setSubjects] = useState<string[]>([]);
   const [newSubject, setNewSubject] = useState('');
   const [editIdx, setEditIdx] = useState<number | null>(null);
@@ -15,7 +36,6 @@ export default function SettingsPage() {
   const [subjectsMsg, setSubjectsMsg] = useState('');
 
   useEffect(() => {
-    // Check connection to Google Sheets
     async function checkConnection() {
       try {
         const res = await fetch('/api/config');
@@ -33,9 +53,29 @@ export default function SettingsPage() {
         setStatusMsg('Нет подключения к серверу');
       }
     }
-    checkConnection();
 
-    // Load subjects
+    async function loadSettings() {
+      try {
+        const res = await fetch('/api/settings');
+        if (res.ok) {
+          const data = await res.json();
+          setGroupName(data.groupName || '');
+          setCurator(data.curator || '');
+          setAcademicYear(data.academicYear || '');
+        }
+      } catch { /* offline */ }
+    }
+
+    async function loadStudents() {
+      try {
+        const res = await fetch('/api/students');
+        if (res.ok) {
+          const data = await res.json();
+          setStudents(data.students || []);
+        }
+      } catch { /* offline */ }
+    }
+
     async function loadSubjects() {
       try {
         const res = await fetch('/api/subjects');
@@ -45,6 +85,10 @@ export default function SettingsPage() {
         }
       } catch { /* offline */ }
     }
+
+    checkConnection();
+    loadSettings();
+    loadStudents();
     loadSubjects();
 
     try {
@@ -60,30 +104,66 @@ export default function SettingsPage() {
     }
   }, []);
 
-  const handleExportAll = () => {
+  // --- Settings save ---
+  const handleSaveSettings = async () => {
+    setSettingsSaving(true);
+    setSettingsMsg('');
     try {
-      const data = localStorage.getItem('el-jurnal-attendance') || '{}';
-      const blob = new Blob([data], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `jurnal-backup-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      alert('Ошибка экспорта: ' + err);
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupName, curator, academicYear }),
+      });
+      if (res.ok) {
+        setSettingsMsg('Сохранено');
+        setTimeout(() => setSettingsMsg(''), 2000);
+      } else {
+        const err = await res.json();
+        setSettingsMsg(`Ошибка: ${err.error}`);
+      }
+    } catch {
+      setSettingsMsg('Нет подключения');
     }
+    setSettingsSaving(false);
   };
 
-  const handleClearCache = () => {
-    if (confirm('Очистить локальный кеш? Данные в Google Таблице останутся.')) {
-      localStorage.removeItem('el-jurnal-attendance');
-      localStorage.removeItem('el-jurnal-config-cache');
-      alert('Кеш очищен');
-      window.location.reload();
-    }
+  // --- Student rename ---
+  const handleStartStudentEdit = (idx: number) => {
+    setEditStudentIdx(idx);
+    setEditStudentValue(students[idx].name);
   };
 
+  const handleSaveStudentEdit = async () => {
+    if (editStudentIdx === null) return;
+    const name = editStudentValue.trim();
+    if (!name) return;
+    const updated = [...students];
+    updated[editStudentIdx] = { ...updated[editStudentIdx], name };
+    setStudentsSaving(true);
+    setStudentsMsg('');
+    try {
+      const res = await fetch('/api/students', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ students: updated }),
+      });
+      if (res.ok) {
+        setStudents(updated);
+        setStudentsMsg('Сохранено');
+        setTimeout(() => setStudentsMsg(''), 2000);
+      } else {
+        const err = await res.json();
+        setStudentsMsg(`Ошибка: ${err.error}`);
+      }
+    } catch {
+      setStudentsMsg('Нет подключения');
+    }
+    setStudentsSaving(false);
+    setEditStudentIdx(null);
+    setEditStudentValue('');
+  };
+
+  // --- Subject management ---
   const saveSubjects = async (updated: string[]) => {
     setSubjectsSaving(true);
     setSubjectsMsg('');
@@ -134,6 +214,30 @@ export default function SettingsPage() {
     setEditValue('');
   };
 
+  const handleExportAll = () => {
+    try {
+      const data = localStorage.getItem('el-jurnal-attendance') || '{}';
+      const blob = new Blob([data], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `jurnal-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Ошибка экспорта: ' + err);
+    }
+  };
+
+  const handleClearCache = () => {
+    if (confirm('Очистить локальный кеш? Данные в Google Таблице останутся.')) {
+      localStorage.removeItem('el-jurnal-attendance');
+      localStorage.removeItem('el-jurnal-config-cache');
+      alert('Кеш очищен');
+      window.location.reload();
+    }
+  };
+
   return (
     <div className="max-w-lg mx-auto pb-8">
       <header className="bg-blue-500 text-white px-4 py-3 sticky top-0 z-50 shadow-md">
@@ -164,11 +268,104 @@ export default function SettingsPage() {
             {statusMsg}
           </p>
         )}
-        {status === 'error' && (
-          <p className="text-xs mt-2 text-gray-400">
-            Убедитесь, что Environment Variables настроены в Vercel (GOOGLE_SPREADSHEET_ID, GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY).
-          </p>
+      </div>
+
+      {/* Group settings */}
+      <div className="px-4 py-4 bg-white border-b border-gray-100">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-bold text-gray-700">Группа и куратор</h2>
+          {settingsMsg && (
+            <span className={`text-xs ${settingsMsg.startsWith('Ошибка') ? 'text-red-500' : 'text-emerald-600'}`}>
+              {settingsMsg}
+            </span>
+          )}
+        </div>
+        <div className="space-y-2.5">
+          <div>
+            <label className="text-xs text-gray-400 mb-0.5 block">Название группы</label>
+            <input
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
+              placeholder="СИС-12"
+              className="w-full text-sm px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-0.5 block">Куратор</label>
+            <input
+              value={curator}
+              onChange={(e) => setCurator(e.target.value)}
+              placeholder="ФИО куратора"
+              className="w-full text-sm px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-0.5 block">Учебный год</label>
+            <input
+              value={academicYear}
+              onChange={(e) => setAcademicYear(e.target.value)}
+              placeholder="2024-2025"
+              className="w-full text-sm px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+          </div>
+          <button
+            onClick={handleSaveSettings}
+            disabled={settingsSaving}
+            className="w-full py-2.5 rounded-xl font-medium text-sm bg-blue-500 text-white disabled:opacity-40"
+          >
+            {settingsSaving ? 'Сохранение...' : 'Сохранить настройки'}
+          </button>
+        </div>
+      </div>
+
+      {/* Students */}
+      <div className="px-4 py-4 bg-white border-b border-gray-100">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-bold text-gray-700">Студенты</h2>
+          {studentsMsg && (
+            <span className={`text-xs ${studentsMsg.startsWith('Ошибка') ? 'text-red-500' : 'text-emerald-600'}`}>
+              {studentsMsg}
+            </span>
+          )}
+        </div>
+        {students.length === 0 ? (
+          <p className="text-xs text-gray-400 mb-3">Загрузка...</p>
+        ) : (
+          <div className="space-y-1.5 max-h-72 overflow-y-auto">
+            {students.map((st, i) => (
+              <div key={st.id} className="flex items-center gap-2">
+                <span className="text-xs text-gray-400 w-5 text-right">{st.id}.</span>
+                {editStudentIdx === i ? (
+                  <>
+                    <input
+                      value={editStudentValue}
+                      onChange={(e) => setEditStudentValue(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSaveStudentEdit()}
+                      className="flex-1 text-sm px-2 py-1.5 border border-blue-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      autoFocus
+                    />
+                    <button
+                      onClick={handleSaveStudentEdit}
+                      disabled={studentsSaving}
+                      className="text-xs text-emerald-600 font-medium px-2"
+                    >OK</button>
+                    <button onClick={() => setEditStudentIdx(null)} className="text-xs text-gray-400 px-1">X</button>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1 text-sm text-gray-700">{st.name}</span>
+                    <button onClick={() => handleStartStudentEdit(i)} className="text-xs text-blue-500 px-2">
+                      Изм.
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
         )}
+        <p className="text-xs text-gray-400 mt-2">
+          Для добавления/удаления студентов редактируйте Google Таблицу напрямую.
+        </p>
       </div>
 
       {/* Subject management */}

@@ -1,4 +1,4 @@
-import { getFormattedValues, updateValues, clearRange, getSheetId, batchUpdate } from './google-sheets';
+import { getFormattedValues, updateValues, clearRange, getSheetId, batchUpdate, ensureSheet } from './google-sheets';
 import { sheets_v4 } from 'googleapis';
 import { getSheetNames, MAIN_SHEET, colToLetter, HOURS_PER_PAIR, findLastStudentRow } from './sheets-config';
 import { Student, ReportRow } from './types';
@@ -25,6 +25,20 @@ export interface ReportData {
   academicYear: string;
 }
 
+/** Read settings (group name, curator) from the "Настройки" sheet if it exists. */
+async function readSettings(): Promise<{ groupName?: string; curator?: string; academicYear?: string }> {
+  try {
+    const data = await getFormattedValues("'Настройки'!A1:B3");
+    return {
+      groupName: data[0]?.[1] || undefined,
+      curator: data[1]?.[1] || undefined,
+      academicYear: data[2]?.[1] || undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
 // Compute all report data from the main attendance sheet
 export async function computeReportData(month: number, year: number): Promise<ReportData> {
   const { main: sheetName } = getSheetNames(month, year % 100);
@@ -40,14 +54,15 @@ export async function computeReportData(month: number, year: number): Promise<Re
     .filter((r) => r[0] && r[1])
     .map((r) => ({ id: parseInt(String(r[0])), name: String(r[1]).trim() }));
 
-  // Read header + subject row + all student data
-  const [headerVals, subjectVals, allData] = await Promise.all([
+  // Read header + subject row + all student data + settings in parallel
+  const [headerVals, subjectVals, allData, settings] = await Promise.all([
     getFormattedValues(`'${sheetName}'!A1:ZZ1`),
     getFormattedValues(`'${sheetName}'!A3:ZZ3`),
     getFormattedValues(`'${sheetName}'!A${MAIN_SHEET.STUDENTS_START_ROW}:ZZ${endRow}`),
+    readSettings(),
   ]);
 
-  const groupName = String(headerVals[0]?.[0] || 'СИС-12').trim();
+  const groupName = settings.groupName || String(headerVals[0]?.[0] || 'СИС-12').trim();
   const allSubjects = subjectVals[0] || [];
 
   // Unique subjects in order
@@ -120,16 +135,19 @@ export async function computeReportData(month: number, year: number): Promise<Re
     return { studentId: st.id, studentName: st.name, bySubject };
   });
 
-  const academicYear = month >= 9 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
+  const computedYear = month >= 9 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
+  const academicYear = settings.academicYear || computedYear;
 
-  // Read curator from existing report sheet if available
-  let curator = '';
-  try {
-    const reportSheetName = getSheetNames(month, year % 100).report;
-    const rh = await getFormattedValues(`'${reportSheetName}'!A1`);
-    const m = String(rh[0]?.[0] || '').match(/Куратор\s*[-–—]\s*(.+)/);
-    if (m) curator = m[1].trim();
-  } catch { /* sheet may not exist yet */ }
+  // Curator from settings or from existing report sheet
+  let curator = settings.curator || '';
+  if (!curator) {
+    try {
+      const reportSheetName = getSheetNames(month, year % 100).report;
+      const rh = await getFormattedValues(`'${reportSheetName}'!A1`);
+      const m = String(rh[0]?.[0] || '').match(/Куратор\s*[-–—]\s*(.+)/);
+      if (m) curator = m[1].trim();
+    } catch { /* sheet may not exist yet */ }
+  }
 
   return {
     students, subjects, subjectHours, totalHours,
@@ -140,7 +158,7 @@ export async function computeReportData(month: number, year: number): Promise<Re
   };
 }
 
-// --- Border helper ---
+// --- Formatting helpers ---
 
 const THIN_BORDER: sheets_v4.Schema$Border = {
   style: 'SOLID',
@@ -151,11 +169,15 @@ const THIN_BORDER: sheets_v4.Schema$Border = {
  * Write the "Отчет" sheet.
  *
  * Layout:
- *   Row 1: Title
- *   Row 2: empty
- *   Rows 3-6: header (merged vertically per column — subject names, ИТОГО, etc.)
- *   Row 7: hours per subject
- *   Rows 8+: student data
+ *   Rows 1-2: Title (merged across full width)
+ *   Rows 3-6: Header (merged vertically per column — subject names, ИТОГО, etc.)
+ *   Row 7:    Hours per subject
+ *   Rows 8+:  Student data
+ *
+ * Formatting:
+ *   - Title merged across all columns
+ *   - Header cells: centered, wrapped, NOT bold, NOT rotated
+ *   - Thin (1px) borders from row 3 to end
  */
 export async function writeReportSheet(month: number, year: number, data: ReportData) {
   const { report: name } = getSheetNames(month, year % 100);
@@ -165,12 +187,12 @@ export async function writeReportSheet(month: number, year: number, data: Report
 
   const rows: unknown[][] = [];
 
-  // Row 1: Title
+  // Row 1: Title (row 2 will be empty but merged with row 1)
   rows.push([
     `Анализ посещаемости занятий в группе ${groupName}  за ${monthName} месяц   ${academicYear}  уч.года\nКуратор - ${curator}`,
   ]);
 
-  // Row 2: empty
+  // Row 2: empty (merged with row 1)
   rows.push([]);
 
   // Row 3: header values (each column will be merged rows 3-6)
@@ -206,42 +228,63 @@ export async function writeReportSheet(month: number, year: number, data: Report
     ]);
   }
 
-  const endCol = 2 + subjects.length + 4; // A(№) + B(name) + subjects + ИТОГО + уважит + %проп + %неуважит
+  const endCol = 2 + subjects.length + 4;
   const endRow = 7 + students.length;
   await updateValues(`'${name}'!A1:${colToLetter(endCol)}${endRow}`, rows);
 
-  // --- Formatting: merges, alignment, borders ---
+  // --- Formatting ---
   try {
     const sheetId = await getSheetId(name);
 
-    // Unmerge any existing merged cells first (from previous report generation)
+    // Step 1: Unmerge + clear old formatting (prevents stale % format leaking to hours cells)
     try {
-      await batchUpdate([{
-        unmergeCells: {
-          range: { sheetId, startRowIndex: 0, endRowIndex: 200, startColumnIndex: 0, endColumnIndex: 50 },
-        },
-      }]);
-    } catch { /* no existing merges */ }
+      await batchUpdate([
+        { unmergeCells: { range: { sheetId, startRowIndex: 0, endRowIndex: 200, startColumnIndex: 0, endColumnIndex: 50 } } },
+        { repeatCell: { range: { sheetId, startRowIndex: 0, endRowIndex: 200, startColumnIndex: 0, endColumnIndex: 50 }, cell: {}, fields: 'userEnteredFormat' } },
+      ]);
+    } catch { /* ok */ }
 
+    // Re-write values after clearing format (USER_ENTERED sets correct format per cell)
+    await updateValues(`'${name}'!A1:${colToLetter(endCol)}${endRow}`, rows);
+
+    // Step 2: Apply formatting
     const requests: sheets_v4.Schema$Request[] = [];
+
+    // Merge rows 1-2 for title across full table width
+    requests.push({
+      mergeCells: {
+        range: { sheetId, startRowIndex: 0, endRowIndex: 2, startColumnIndex: 0, endColumnIndex: endCol },
+        mergeType: 'MERGE_ALL',
+      },
+    });
+
+    // Title formatting: wrap, center, middle
+    requests.push({
+      repeatCell: {
+        range: { sheetId, startRowIndex: 0, endRowIndex: 2, startColumnIndex: 0, endColumnIndex: endCol },
+        cell: {
+          userEnteredFormat: {
+            horizontalAlignment: 'CENTER',
+            verticalAlignment: 'MIDDLE',
+            wrapStrategy: 'WRAP',
+            textFormat: { bold: false },
+          },
+        },
+        fields: 'userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment,userEnteredFormat.wrapStrategy,userEnteredFormat.textFormat.bold',
+      },
+    });
 
     // Merge header cells rows 3-6 (0-indexed 2-5) for each column
     for (let col = 0; col < endCol; col++) {
       requests.push({
         mergeCells: {
-          range: {
-            sheetId,
-            startRowIndex: 2,
-            endRowIndex: 6,
-            startColumnIndex: col,
-            endColumnIndex: col + 1,
-          },
+          range: { sheetId, startRowIndex: 2, endRowIndex: 6, startColumnIndex: col, endColumnIndex: col + 1 },
           mergeType: 'MERGE_ALL',
         },
       });
     }
 
-    // Center + wrap + middle-align header cells
+    // Header formatting: center, middle, wrap, NOT bold, NOT rotated
     requests.push({
       repeatCell: {
         range: { sheetId, startRowIndex: 2, endRowIndex: 6, startColumnIndex: 0, endColumnIndex: endCol },
@@ -250,22 +293,40 @@ export async function writeReportSheet(month: number, year: number, data: Report
             verticalAlignment: 'MIDDLE',
             horizontalAlignment: 'CENTER',
             wrapStrategy: 'WRAP',
+            textFormat: { bold: false },
+            textRotation: { angle: 0 },
           },
         },
-        fields: 'userEnteredFormat.verticalAlignment,userEnteredFormat.horizontalAlignment,userEnteredFormat.wrapStrategy',
+        fields: 'userEnteredFormat.verticalAlignment,userEnteredFormat.horizontalAlignment,userEnteredFormat.wrapStrategy,userEnteredFormat.textFormat.bold,userEnteredFormat.textRotation',
       },
     });
 
-    // Thin borders from row 3 to end of data
+    // Set reasonable width for subject columns so names wrap nicely (not look rotated)
+    if (subjects.length > 0) {
+      requests.push({
+        updateDimensionProperties: {
+          range: { sheetId, dimension: 'COLUMNS', startIndex: 2, endIndex: 2 + subjects.length },
+          properties: { pixelSize: 85 },
+          fields: 'pixelSize',
+        },
+      });
+    }
+
+    // Data area: NOT bold
+    requests.push({
+      repeatCell: {
+        range: { sheetId, startRowIndex: 6, endRowIndex: endRow, startColumnIndex: 0, endColumnIndex: endCol },
+        cell: { userEnteredFormat: { textFormat: { bold: false } } },
+        fields: 'userEnteredFormat.textFormat.bold',
+      },
+    });
+
+    // Thin borders from row 3 to end
     requests.push({
       updateBorders: {
         range: { sheetId, startRowIndex: 2, endRowIndex: endRow, startColumnIndex: 0, endColumnIndex: endCol },
-        top: THIN_BORDER,
-        bottom: THIN_BORDER,
-        left: THIN_BORDER,
-        right: THIN_BORDER,
-        innerHorizontal: THIN_BORDER,
-        innerVertical: THIN_BORDER,
+        top: THIN_BORDER, bottom: THIN_BORDER, left: THIN_BORDER, right: THIN_BORDER,
+        innerHorizontal: THIN_BORDER, innerVertical: THIN_BORDER,
       },
     });
 
@@ -277,11 +338,16 @@ export async function writeReportSheet(month: number, year: number, data: Report
  * Write the "Подробно" sheet.
  *
  * Layout:
- *   Rows 1-2: empty (offset so table starts at row 3)
- *   Row 3: subject headers (each spans 3 columns: Ч, Н, У)
- *   Row 4: sub-headers — Ч, Н, У for each subject
- *   Rows 5+: student data
- *   Last row: total hours (column B = grand total, subject cols = per-subject)
+ *   Row 1: Subject headers (each spans 3 columns: Ч, Н, У) + merged №, ФИО
+ *   Row 2: Sub-headers — Ч, Н, У for each subject
+ *   Rows 3+: Student data
+ *   Last row: Total hours (B = grand total, subject Ч cols = per-subject)
+ *
+ * Formatting:
+ *   - Student A+B cells: dark blue bg, white text
+ *   - Total A+B cells: light gray bg, black text
+ *   - All text NOT bold
+ *   - Thin borders from row 1 to end
  */
 export async function writeDetailedSheet(month: number, year: number, data: ReportData) {
   const { detailed: name } = getSheetNames(month, year % 100);
@@ -291,21 +357,17 @@ export async function writeDetailedSheet(month: number, year: number, data: Repo
 
   const rows: unknown[][] = [];
 
-  // Rows 1-2: empty (data starts from row 3)
-  rows.push([]);
-  rows.push([]);
-
-  // Row 3: subject group headers (each subject spans 3 cols)
+  // Row 1: subject group headers (each subject spans 3 cols)
   const h1: unknown[] = ['№', 'ФИО'];
   for (const s of subjects) { h1.push(s, '', ''); }
   rows.push(h1);
 
-  // Row 4: sub-headers
+  // Row 2: sub-headers
   const h2: unknown[] = ['', ''];
   for (let i = 0; i < subjects.length; i++) { h2.push('Ч', 'Н', 'У'); }
   rows.push(h2);
 
-  // Rows 5+: student data
+  // Rows 3+: student data
   for (let i = 0; i < detailedRows.length; i++) {
     const dr = detailedRows[i];
     const row: unknown[] = [i + 1, dr.studentName];
@@ -322,73 +384,111 @@ export async function writeDetailedSheet(month: number, year: number, data: Repo
   rows.push(hoursRow);
 
   const endCol = 2 + subjects.length * 3;
-  const endRow = 2 + 2 + detailedRows.length + 1; // 2 empty + 2 headers + students + 1 hours row
+  const endRow = 2 + detailedRows.length + 1; // 2 headers + students + 1 totals
   await updateValues(`'${name}'!A1:${colToLetter(endCol)}${endRow}`, rows);
 
-  // --- Formatting: merges, alignment, borders ---
+  // --- Formatting ---
   try {
     const sheetId = await getSheetId(name);
 
-    // Unmerge any existing merged cells first
+    // Step 1: Unmerge + clear old formatting
     try {
-      await batchUpdate([{
-        unmergeCells: {
-          range: { sheetId, startRowIndex: 0, endRowIndex: 200, startColumnIndex: 0, endColumnIndex: 100 },
-        },
-      }]);
-    } catch { /* no existing merges */ }
+      await batchUpdate([
+        { unmergeCells: { range: { sheetId, startRowIndex: 0, endRowIndex: 200, startColumnIndex: 0, endColumnIndex: 100 } } },
+        { repeatCell: { range: { sheetId, startRowIndex: 0, endRowIndex: 200, startColumnIndex: 0, endColumnIndex: 100 }, cell: {}, fields: 'userEnteredFormat' } },
+      ]);
+    } catch { /* ok */ }
+
+    // Re-write values after clearing format
+    await updateValues(`'${name}'!A1:${colToLetter(endCol)}${endRow}`, rows);
 
     const requests: sheets_v4.Schema$Request[] = [];
 
-    // Merge A3:A4 (№) and B3:B4 (ФИО)
+    // Merge A1:A2 (№) and B1:B2 (ФИО)
     requests.push({
       mergeCells: {
-        range: { sheetId, startRowIndex: 2, endRowIndex: 4, startColumnIndex: 0, endColumnIndex: 1 },
+        range: { sheetId, startRowIndex: 0, endRowIndex: 2, startColumnIndex: 0, endColumnIndex: 1 },
         mergeType: 'MERGE_ALL',
       },
     });
     requests.push({
       mergeCells: {
-        range: { sheetId, startRowIndex: 2, endRowIndex: 4, startColumnIndex: 1, endColumnIndex: 2 },
+        range: { sheetId, startRowIndex: 0, endRowIndex: 2, startColumnIndex: 1, endColumnIndex: 2 },
         mergeType: 'MERGE_ALL',
       },
     });
 
-    // Merge subject name cells in row 3 (each subject spans 3 columns)
+    // Merge subject name cells in row 1 (each subject spans 3 columns)
     for (let i = 0; i < subjects.length; i++) {
       const sc = 2 + i * 3;
       requests.push({
         mergeCells: {
-          range: { sheetId, startRowIndex: 2, endRowIndex: 3, startColumnIndex: sc, endColumnIndex: sc + 3 },
+          range: { sheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: sc, endColumnIndex: sc + 3 },
           mergeType: 'MERGE_ALL',
         },
       });
     }
 
-    // Center + middle-align headers
+    // All text NOT bold for entire table
     requests.push({
       repeatCell: {
-        range: { sheetId, startRowIndex: 2, endRowIndex: 4, startColumnIndex: 0, endColumnIndex: endCol },
+        range: { sheetId, startRowIndex: 0, endRowIndex: endRow, startColumnIndex: 0, endColumnIndex: endCol },
+        cell: { userEnteredFormat: { textFormat: { bold: false } } },
+        fields: 'userEnteredFormat.textFormat.bold',
+      },
+    });
+
+    // Center + middle-align headers (rows 1-2)
+    requests.push({
+      repeatCell: {
+        range: { sheetId, startRowIndex: 0, endRowIndex: 2, startColumnIndex: 0, endColumnIndex: endCol },
         cell: {
           userEnteredFormat: {
             horizontalAlignment: 'CENTER',
             verticalAlignment: 'MIDDLE',
+            textFormat: { bold: false },
           },
         },
-        fields: 'userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment',
+        fields: 'userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment,userEnteredFormat.textFormat.bold',
       },
     });
 
-    // Thin borders from row 3 to end of data
+    // Student rows: columns A+B — dark blue bg, white text
+    const studentStart = 2; // row 3 (0-indexed)
+    const studentEnd = 2 + detailedRows.length;
+    requests.push({
+      repeatCell: {
+        range: { sheetId, startRowIndex: studentStart, endRowIndex: studentEnd, startColumnIndex: 0, endColumnIndex: 2 },
+        cell: {
+          userEnteredFormat: {
+            backgroundColor: { red: 0.17, green: 0.34, blue: 0.6 },
+            textFormat: { foregroundColor: { red: 1, green: 1, blue: 1 }, bold: false },
+          },
+        },
+        fields: 'userEnteredFormat.backgroundColor,userEnteredFormat.textFormat',
+      },
+    });
+
+    // Total row: columns A+B — light gray bg, black text
+    requests.push({
+      repeatCell: {
+        range: { sheetId, startRowIndex: studentEnd, endRowIndex: studentEnd + 1, startColumnIndex: 0, endColumnIndex: 2 },
+        cell: {
+          userEnteredFormat: {
+            backgroundColor: { red: 0.9, green: 0.9, blue: 0.9 },
+            textFormat: { foregroundColor: { red: 0, green: 0, blue: 0 }, bold: false },
+          },
+        },
+        fields: 'userEnteredFormat.backgroundColor,userEnteredFormat.textFormat',
+      },
+    });
+
+    // Thin borders from row 1 to end
     requests.push({
       updateBorders: {
-        range: { sheetId, startRowIndex: 2, endRowIndex: endRow, startColumnIndex: 0, endColumnIndex: endCol },
-        top: THIN_BORDER,
-        bottom: THIN_BORDER,
-        left: THIN_BORDER,
-        right: THIN_BORDER,
-        innerHorizontal: THIN_BORDER,
-        innerVertical: THIN_BORDER,
+        range: { sheetId, startRowIndex: 0, endRowIndex: endRow, startColumnIndex: 0, endColumnIndex: endCol },
+        top: THIN_BORDER, bottom: THIN_BORDER, left: THIN_BORDER, right: THIN_BORDER,
+        innerHorizontal: THIN_BORDER, innerVertical: THIN_BORDER,
       },
     });
 

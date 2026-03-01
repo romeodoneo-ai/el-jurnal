@@ -78,3 +78,10 @@ export async function batchUpdate(requests: sheets_v4.Schema$Request[]): Promise
     requestBody: { requests },
   });
 }
+
+/** Ensure a sheet exists; create it if it doesn't. */
+export async function ensureSheet(name: string): Promise<void> {
+  const names = await listSheetNames();
+  if (names.includes(name)) return;
+  await batchUpdate([{ addSheet: { properties: { title: name } } }]);
+}
