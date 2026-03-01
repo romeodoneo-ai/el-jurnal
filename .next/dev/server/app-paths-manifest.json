@@ -1,7 +1,5 @@
 {
   "/api/attendance/route": "app/api/attendance/route.js",
   "/api/config/route": "app/api/config/route.js",
-  "/api/subjects/route": "app/api/subjects/route.js",
-  "/page": "app/page.js",
-  "/settings/page": "app/settings/page.js"
+  "/page": "app/page.js"
 }

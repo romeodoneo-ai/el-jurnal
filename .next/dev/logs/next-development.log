@@ -1,11 +1,9 @@
-[00:00:02.012] Server  LOG     ✓ Ready in 1496ms
-[00:00:05.057] Server  WARN    ⚠ Cross origin request detected from 127.0.0.1 to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure "allowedDevOrigins" in next.config to allow this.
+[00:00:02.159] Server  LOG     ✓ Ready in 1785ms
+[00:00:03.487] Server  WARN    ⚠ Cross origin request detected from 127.0.0.1 to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure "allowedDevOrigins" in next.config to allow this.
 Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins
-[00:00:05.284] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
-[00:00:12.349] Server  ERROR   Config API error: "Google Sheets не настроен: добавьте GOOGLE_SERVICE_ACCOUNT_EMAIL и GOOGLE_PRIVATE_KEY в переменные окружения"
-[00:00:12.839] Server  ERROR   Attendance GET error: "Google Sheets не настроен: добавьте GOOGLE_SERVICE_ACCOUNT_EMAIL и GOOGLE_PRIVATE_KEY в переменные окружения"
-[00:00:21.017] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
-[00:00:21.054] Server  ERROR   Config API error: "Google Sheets не настроен: добавьте GOOGLE_SERVICE_ACCOUNT_EMAIL и GOOGLE_PRIVATE_KEY в переменные окружения"
-[00:00:25.445] Server  ERROR   Config API error: "Google Sheets не настроен: добавьте GOOGLE_SERVICE_ACCOUNT_EMAIL и GOOGLE_PRIVATE_KEY в переменные окружения"
-[00:00:25.466] Server  ERROR   Config API error: "Google Sheets не настроен: добавьте GOOGLE_SERVICE_ACCOUNT_EMAIL и GOOGLE_PRIVATE_KEY в переменные окружения"
-[00:00:25.484] Server  ERROR   Attendance GET error: "Google Sheets не настроен: добавьте GOOGLE_SERVICE_ACCOUNT_EMAIL и GOOGLE_PRIVATE_KEY в переменные окружения"
+[00:00:03.540] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:00:05.651] Server  ERROR   Config API error: "Google Sheets не настроен: добавьте GOOGLE_SERVICE_ACCOUNT_EMAIL и GOOGLE_PRIVATE_KEY в переменные окружения"
+[00:00:05.766] Server  ERROR   Attendance GET error: "Google Sheets не настроен: добавьте GOOGLE_SERVICE_ACCOUNT_EMAIL и GOOGLE_PRIVATE_KEY в переменные окружения"
+[00:00:05.871] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:00:05.888] Server  ERROR   Config API error: "Google Sheets не настроен: добавьте GOOGLE_SERVICE_ACCOUNT_EMAIL и GOOGLE_PRIVATE_KEY в переменные окружения"
+[00:00:05.954] Server  ERROR   Attendance GET error: "Google Sheets не настроен: добавьте GOOGLE_SERVICE_ACCOUNT_EMAIL и GOOGLE_PRIVATE_KEY в переменные окружения"
